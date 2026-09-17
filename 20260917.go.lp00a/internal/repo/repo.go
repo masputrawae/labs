@@ -76,7 +76,7 @@ func (r *repo) GetAll(ctx context.Context) ([]model.Todo, error) {
 
 	defer rows.Close()
 
-	var items []model.Todo
+	var items = []model.Todo{}
 	for rows.Next() {
 		var i model.Todo
 		err = rows.Scan(
