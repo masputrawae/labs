@@ -1,0 +1,24 @@
+-- +goose Up
+CREATE TABLE todos (
+	id          INTEGER PRIMARY KEY AUTOINCREMENT,
+	task        TEXT NOT NULL,
+	due_date    DATETIME,
+	created_at  DATETIME NOT NULL,
+	updated_at  DATETIME NOT NULL,
+	status_id   INTEGER NOT NULL DEFAULT 1,
+	priority_id INTEGER NOT NULL DEFAULT 3,
+	user_id     TEXT NOT NULL,
+	FOREIGN KEY(priority_id) REFERENCES priorities(id)
+		ON UPDATE RESTRICT
+		ON DELETE RESTRICT,
+	FOREIGN KEY(status_id) REFERENCES statuses(id)
+		ON UPDATE RESTRICT
+		ON DELETE RESTRICT,
+	FOREIGN KEY(user_id) REFERENCES users(id)
+		ON UPDATE CASCADE
+		ON DELETE CASCADE
+);
+
+
+-- +goose Down
+DROP TABLE todos;
