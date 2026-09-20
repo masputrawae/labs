@@ -38,11 +38,9 @@ func (m *middleware) Auth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		log.Println(cookie)
 		session, err := m.usecaseSession.Get(r.Context(), cookie.Value)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) || errors.Is(err, usecase.ErrSessionHasExpired) {
-				log.Println(err)
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}

@@ -12,6 +12,7 @@ import (
 	"time"
 	"todo/internal/controller/handler"
 	"todo/internal/controller/middleware"
+	"todo/internal/domain/model"
 	"todo/internal/infra/database"
 	"todo/internal/repo"
 	"todo/internal/usecase"
@@ -39,6 +40,14 @@ func main() {
 		return name
 	})
 
+	validate.RegisterCustomTypeFunc(func(field reflect.Value) any {
+		optional, ok := field.Interface().(model.Optional[time.Time])
+		if !ok || !optional.Valid {
+			return nil
+		}
+		return optional.Value
+	}, model.Optional[time.Time]{})
+
 	initCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -49,18 +58,33 @@ func main() {
 
 	repoUser := repo.NewUser(db)
 	repoSession := repo.NewSession(db)
+	repoTodo := repo.NewTodo(db)
 
 	usecaseUser := usecase.NewUser(repoUser)
 	usecaseSession := usecase.NewSession(repoSession)
+	usecaseTodo := usecase.NewTodo(repoTodo)
 
 	handlerUser := handler.NewUser(usecaseUser, usecaseSession, validate)
+	handlerTodo := handler.NewTodo(usecaseTodo, validate)
 	mw := middleware.New(usecaseSession)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/register", handlerUser.Register)
 	mux.HandleFunc("POST /api/login", handlerUser.Login)
+	mux.HandleFunc("POST /api/logout", handlerUser.Logout)
+
 	mux.HandleFunc("GET /api/me", mw.Auth(handlerUser.Get))
-	mux.HandleFunc("PATCH /api/me/update", mw.Auth(handlerUser.Update))
+	mux.HandleFunc("PATCH /api/me", mw.Auth(handlerUser.Update))
+	mux.HandleFunc("DELETE /api/me", mw.Auth(handlerUser.Delete))
+
+	mux.HandleFunc("POST /api/todos", mw.Auth(handlerTodo.Create))
+	mux.HandleFunc("GET /api/todos", mw.Auth(handlerTodo.GetAll))
+	mux.HandleFunc("PATCH /api/todos/{id}", mw.Auth(handlerTodo.Update))
+	mux.HandleFunc("DELETE /api/todos/{id}", mw.Auth(handlerTodo.Delete))
+	mux.HandleFunc("DELETE /api/todos", mw.Auth(handlerTodo.DeleteAll))
+
+	mux.HandleFunc("GET /api/statuses", handlerTodo.GetStatuses)
+	mux.HandleFunc("GET /api/priorities", handlerTodo.GetPriorities)
 
 	srv := &http.Server{
 		Addr:    ":8080",
@@ -77,7 +101,7 @@ func main() {
 		}
 	}()
 
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
 
 	go func() {

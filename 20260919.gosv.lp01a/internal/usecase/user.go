@@ -74,7 +74,11 @@ func (u *user) Update(ctx context.Context, req model.UserUpdateRequest) error {
 	}
 
 	if req.Password != nil {
-		if password.Check(i.Password, *req.OldPassword) {
+		if req.OldPassword == nil {
+			return ErrCredentials
+		}
+
+		if !password.Check(i.Password, *req.OldPassword) {
 			return ErrCredentials
 		}
 

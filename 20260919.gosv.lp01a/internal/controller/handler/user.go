@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"database/sql"
 	"errors"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 	"todo/internal/domain/model"
 	"todo/internal/usecase"
 
@@ -16,8 +18,10 @@ import (
 type User interface {
 	Register(w http.ResponseWriter, r *http.Request)
 	Login(w http.ResponseWriter, r *http.Request)
+	Logout(w http.ResponseWriter, r *http.Request)
 	Update(w http.ResponseWriter, r *http.Request)
 	Get(w http.ResponseWriter, r *http.Request)
+	Delete(w http.ResponseWriter, r *http.Request)
 }
 
 type user struct {
@@ -61,14 +65,14 @@ func (u *user) Register(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		log.Println("error user register:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	cookie, err := u.usecaseSession.Create(r.Context(), id)
 	if err != nil {
-		log.Println("error create session", err)
-		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("error create session:", err)
 	}
 
 	http.SetCookie(w, cookie)
@@ -88,17 +92,37 @@ func (u *user) Login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Println("error login", err)
+		log.Println("error user login:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 
 	cookie, err := u.usecaseSession.Create(r.Context(), id)
 	if err != nil {
-		log.Println("error create session", err)
-		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("error create session:", err)
 	}
 
 	http.SetCookie(w, cookie)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (u *user) Logout(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		return
+	}
+
+	sessionID := cookie.Value
+	if err = u.usecaseSession.Delete(r.Context(), sessionID); err != nil {
+		log.Println("error delete session:", err)
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:    "session_id",
+		Value:   "",
+		MaxAge:  -1,
+		Expires: time.Now().Add(-1).UTC(),
+	})
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -133,7 +157,7 @@ func (u *user) Update(w http.ResponseWriter, r *http.Request) {
 			}
 
 		}
-		log.Println(err)
+		log.Println("error user update:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 
@@ -144,10 +168,48 @@ func (u *user) Get(w http.ResponseWriter, r *http.Request) {
 	userID, _ := r.Context().Value("userID").(string)
 	data, err := u.usecaseUser.Get(r.Context(), userID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
 		log.Println("error get user:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	JSON(w, http.StatusOK, H{"data": data})
+}
+
+func (u *user) Delete(w http.ResponseWriter, r *http.Request) {
+	userID, _ := r.Context().Value("userID").(string)
+	req := model.UserDeleteRequest{
+		UserID: userID,
+	}
+	if !Bind(w, r, u.validate, &req) {
+		return
+	}
+
+	if err := u.usecaseUser.Delete(r.Context(), req); err != nil {
+		if errors.Is(err, usecase.ErrCredentials) {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		if errors.Is(err, sql.ErrNoRows) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:    "session_id",
+		Value:   "",
+		MaxAge:  -1,
+		Expires: time.Now().Add(-1).UTC(),
+	})
+	w.WriteHeader(http.StatusNoContent)
 }
