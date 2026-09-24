@@ -33,7 +33,9 @@ type User struct {
 }
 
 var dummy = []string{
+	`{ "name": "John", "age": 20, "is_active": true }`,
 	`{ "name": "", "age": 0, "is_active": false }`,
+	`{ "name": null, "age": null, "is_active": null }`,
 	`{ "age": 20 }`,
 	`{ }`,
 }
@@ -42,6 +44,7 @@ func main() {
 	for _, d := range dummy {
 		var data User
 		_ = json.Unmarshal([]byte(d), &data)
+		fmt.Printf("%+v", data)
 		j, _ := json.MarshalIndent(data, "", "  ")
 		fmt.Println(string(j))
 	}
